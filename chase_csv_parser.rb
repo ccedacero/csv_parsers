@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 require 'csv'
-require 'byebug'
 
 csv_headers = nil
 category_totals = {}
+dirname = File.basename(Dir.getwd)
+
+puts "*** Combining csv files on folder #{dirname} ***"
 
 combined_csv_file = CSV.open('combined_files.csv',
                              'w+')
@@ -21,28 +23,36 @@ budget_csvs.each do |budget_file|
   current_csv.each do |row|
     next if row == csv_headers
 
+    # Payments on chase csv exports currenyly don't have a category value
+    row['Category'] = 'Payment' if row['Category'].nil? && row['Type'] == 'Payment'
+
     if category_totals[row['Category']]
       category_totals[row['Category']] += row['Amount'].to_f.round(2)
     else
       category_totals[row['Category']] =
         row['Amount'].to_f.round(2)
     end
-    combined_csv_file << [row['Transaction Date'],
-                          row['Post Date'],
-                          row['Description'],
-                          row['Category'],
-                          row['Type'],
-                          row['Amount'],
-                          row['Memo']]
+
+    mapped_row = row.headers.map { |col| row[col] }
+    combined_csv_file << mapped_row
   end
 end
 
-combined_csv_file << ['', '', '', '', '', 'Category', 'Total']
+results_arr_row_filler = [*1..csv_headers.length - 1].map { |_v| '' }
+result_headers = results_arr_row_filler + ['Category', 'Total', 'Total Expenses', 'Total Payments']
+combined_csv_file << result_headers
+total = 0
+last_key = category_totals.keys.last
 
-category_totals.each do |k, v|
-  combined_csv_file << ['', '', '', '', '', k, v.round(2)]
+category_totals.each do |key, value|
+  total += value unless value.positive?
+  combined_csv_file << results_arr_row_filler + [key, value.round(2)]
+  if last_key == key
+    combined_csv_file << results_arr_row_filler + ['', '', total.round(2),
+                                                   category_totals['Payment'].round(2)]
+  end
 end
 
 combined_csv_file.close
 
-puts 'Done combining csv files'
+puts "*** Done combining and adding csv files on #{dirname} ***"
